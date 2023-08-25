@@ -48,7 +48,9 @@ import org.jvnet.hudson.test.TestExtension;
 
 public class EventsTest {
 
-    /** All tests in this class only use Jenkins for the extensions */
+    /**
+     * All tests in this class only use Jenkins for the extensions
+     */
     @ClassRule
     public static JenkinsRule r = new JenkinsRule();
 
@@ -98,6 +100,42 @@ public class EventsTest {
 
         firedEventType = SCMEvent.Type.UPDATED;
         ghEvent = callOnEvent(subscriber, "EventsTest/pushEventUpdated.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghCreateEventForTag_then_createHeadEventFired() throws Exception {
+        CreateGHEventSubscriber subscriber = new CreateGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.CREATED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/createEventForTag.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghCreateEventForBranch_then_createHeadEventFired() throws Exception {
+        CreateGHEventSubscriber subscriber = new CreateGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.CREATED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/createEventForBranch.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghDeleteEventForTag_then_removeHeadEventFired() throws Exception {
+        DeleteGHEventSubscriber subscriber = new DeleteGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.REMOVED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/deleteEventForTag.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghDeleteEventForBranch_then_removeHeadEventFired() throws Exception {
+        DeleteGHEventSubscriber subscriber = new DeleteGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.REMOVED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/deleteEventForBranch.json");
         waitAndAssertReceived(true);
     }
 
@@ -178,6 +216,13 @@ public class EventsTest {
 
         ghEvent = callOnEvent(subscriber, "EventsTest/repositoryEventNotFiredWrongAction.json");
         waitAndAssertReceived(false);
+    }
+
+    private <S extends AbstractGHEventSubscriber> GHSubscriberEvent callOnEvent(S subscriber, String eventPayloadFile)
+            throws IOException {
+        GHSubscriberEvent event = createEvent(eventPayloadFile);
+        subscriber.onEvent(event);
+        return event;
     }
 
     private GHSubscriberEvent callOnEvent(PushGHEventSubscriber subscriber, String eventPayloadFile)

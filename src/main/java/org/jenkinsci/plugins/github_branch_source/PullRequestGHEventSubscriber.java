@@ -24,79 +24,50 @@
 
 package org.jenkinsci.plugins.github_branch_source;
 
-import static com.google.common.collect.Sets.immutableEnumSet;
-import static org.kohsuke.github.GHEvent.PULL_REQUEST;
-
 import com.cloudbees.jenkins.GitHubRepositoryName;
 import edu.umd.cs.findbugs.annotations.NonNull;
-import edu.umd.cs.findbugs.annotations.Nullable;
 import hudson.Extension;
-import hudson.model.Item;
-import hudson.scm.SCM;
+import jenkins.plugins.git.AbstractGitSCMSource;
+import jenkins.scm.api.SCMEvent;
+import jenkins.scm.api.SCMHead;
+import jenkins.scm.api.SCMHeadObserver;
+import jenkins.scm.api.SCMNavigator;
+import jenkins.scm.api.SCMRevision;
+import jenkins.scm.api.SCMSource;
+import jenkins.scm.api.mixin.ChangeRequestCheckoutStrategy;
+import org.jenkinsci.plugins.github.extension.GHSubscriberEvent;
+import org.kohsuke.github.GHEvent;
+import org.kohsuke.github.GHEventPayload;
+import org.kohsuke.github.GHPullRequest;
+import org.kohsuke.github.GHUser;
+import org.kohsuke.github.GitHub;
+
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import jenkins.plugins.git.AbstractGitSCMSource;
-import jenkins.scm.api.SCMEvent;
-import jenkins.scm.api.SCMHead;
-import jenkins.scm.api.SCMHeadEvent;
-import jenkins.scm.api.SCMHeadObserver;
-import jenkins.scm.api.SCMNavigator;
-import jenkins.scm.api.SCMRevision;
-import jenkins.scm.api.SCMSource;
-import jenkins.scm.api.SCMSourceOwner;
-import jenkins.scm.api.mixin.ChangeRequestCheckoutStrategy;
-import jenkins.scm.api.trait.SCMHeadPrefilter;
-import org.jenkinsci.plugins.github.extension.GHEventsSubscriber;
-import org.jenkinsci.plugins.github.extension.GHSubscriberEvent;
-import org.kohsuke.github.GHEvent;
-import org.kohsuke.github.GHEventPayload;
-import org.kohsuke.github.GHPullRequest;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GHUser;
-import org.kohsuke.github.GitHub;
 
-/** This subscriber manages {@link org.kohsuke.github.GHEvent} PULL_REQUEST. */
+import static com.google.common.collect.Sets.immutableEnumSet;
+import static org.kohsuke.github.GHEvent.PULL_REQUEST;
+
+/**
+ * This subscriber manages {@link org.kohsuke.github.GHEvent} PULL_REQUEST.
+ */
 @Extension
-public class PullRequestGHEventSubscriber extends GHEventsSubscriber {
+public class PullRequestGHEventSubscriber extends AbstractGHEventSubscriber {
 
     private static final Logger LOGGER = Logger.getLogger(PullRequestGHEventSubscriber.class.getName());
-    private static final Pattern REPOSITORY_NAME_PATTERN = Pattern.compile("https?://([^/]+)/([^/]+)/([^/]+)");
 
-    @Override
-    protected boolean isApplicable(@Nullable Item project) {
-        if (project != null) {
-            if (project instanceof SCMSourceOwner) {
-                SCMSourceOwner owner = (SCMSourceOwner) project;
-                for (SCMSource source : owner.getSCMSources()) {
-                    if (source instanceof GitHubSCMSource) {
-                        return true;
-                    }
-                }
-            }
-            if (project.getParent() instanceof SCMSourceOwner) {
-                SCMSourceOwner owner = (SCMSourceOwner) project.getParent();
-                for (SCMSource source : owner.getSCMSources()) {
-                    if (source instanceof GitHubSCMSource) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    /** @return set with only PULL_REQUEST event */
+    /**
+     * @return set with only PULL_REQUEST event
+     */
     @Override
     protected Set<GHEvent> events() {
         return immutableEnumSet(PULL_REQUEST);
@@ -104,75 +75,55 @@ public class PullRequestGHEventSubscriber extends GHEventsSubscriber {
 
     @Override
     protected void onEvent(GHSubscriberEvent event) {
+        GHEventPayload.PullRequest p;
         try {
-            final GHEventPayload.PullRequest p = GitHub.offline()
+            p = GitHub.offline()
                     .parseEventPayload(new StringReader(event.getPayload()), GHEventPayload.PullRequest.class);
-            String action = p.getAction();
-            String repoUrl = p.getRepository().getHtmlUrl().toExternalForm();
-            LOGGER.log(Level.FINE, "Received {0} for {1} from {2}", new Object[] {
-                event.getGHEvent(), repoUrl, event.getOrigin()
-            });
-            Matcher matcher = REPOSITORY_NAME_PATTERN.matcher(repoUrl);
-            if (matcher.matches()) {
-                final GitHubRepositoryName changedRepository = GitHubRepositoryName.create(repoUrl);
-                if (changedRepository == null) {
-                    LOGGER.log(Level.WARNING, "Malformed repository URL {0}", repoUrl);
-                    return;
-                }
-
-                if ("opened".equals(action)) {
-                    fireAfterDelay(new SCMHeadEventImpl(
-                            SCMEvent.Type.CREATED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
-                } else if ("reopened".equals(action)
-                        || "synchronize".equals(action)
-                        || "edited".equals(action)
-                        || "ready_for_review".equals(action)
-                        || "converted_to_draft".equals(action)) {
-                    fireAfterDelay(new SCMHeadEventImpl(
-                            SCMEvent.Type.UPDATED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
-                } else if ("closed".equals(action)) {
-                    fireAfterDelay(new SCMHeadEventImpl(
-                            SCMEvent.Type.REMOVED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
-                }
-            }
-
         } catch (IOException e) {
             LogRecord lr = new LogRecord(Level.WARNING, "Could not parse {0} event from {1} with payload: {2}");
-            lr.setParameters(new Object[] {event.getGHEvent(), event.getOrigin(), event.getPayload()});
+            lr.setParameters(new Object[]{event.getGHEvent(), event.getOrigin(), event.getPayload()});
             lr.setThrown(e);
             LOGGER.log(lr);
+            return;
         }
+
+        String repoUrl = p.getRepository().getHtmlUrl().toExternalForm();
+        LOGGER.log(Level.FINE, "Received {0} for {1} from {2}", new Object[]{
+                event.getGHEvent(), repoUrl, event.getOrigin()
+        });
+
+        Optional<GitHubRepositoryName> repoNameOption = validateRepository(p);
+        if (repoNameOption.isEmpty()) {
+            return;
+        }
+        GitHubRepositoryName changedRepository = repoNameOption.get();
+
+        String action = p.getAction();
+        if ("opened".equals(action)) {
+            fireAfterDelay(new SCMHeadEventImpl(
+                    SCMEvent.Type.CREATED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
+        } else if ("reopened".equals(action)
+                || "synchronize".equals(action)
+                || "edited".equals(action)
+                || "ready_for_review".equals(action)
+                || "converted_to_draft".equals(action)) {
+            fireAfterDelay(new SCMHeadEventImpl(
+                    SCMEvent.Type.UPDATED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
+        } else if ("closed".equals(action)) {
+            fireAfterDelay(new SCMHeadEventImpl(
+                    SCMEvent.Type.REMOVED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
+        }
+
     }
 
-    private void fireAfterDelay(final SCMHeadEventImpl e) {
-        SCMHeadEvent.fireLater(e, GitHubSCMSource.getEventDelaySeconds(), TimeUnit.SECONDS);
-    }
-
-    private static class SCMHeadEventImpl extends SCMHeadEvent<GHEventPayload.PullRequest> {
-        private final String repoHost;
-        private final String repoOwner;
-        private final String repository;
-
+    private static class SCMHeadEventImpl extends AbstractSCMHeadEvent<GHEventPayload.PullRequest> {
         public SCMHeadEventImpl(
                 Type type,
                 long timestamp,
                 GHEventPayload.PullRequest pullRequest,
                 GitHubRepositoryName repo,
                 String origin) {
-            super(type, timestamp, pullRequest, origin);
-            this.repoHost = repo.getHost();
-            this.repoOwner = pullRequest.getRepository().getOwnerName();
-            this.repository = pullRequest.getRepository().getName();
-        }
-
-        private boolean isApiMatch(String apiUri) {
-            return repoHost.equalsIgnoreCase(RepositoryUriResolver.hostnameFromApiUri(apiUri));
-        }
-
-        @Override
-        public boolean isMatch(@NonNull SCMNavigator navigator) {
-            return navigator instanceof GitHubSCMNavigator
-                    && repoOwner.equalsIgnoreCase(((GitHubSCMNavigator) navigator).getRepoOwner());
+            super(type, timestamp, pullRequest, repo, origin);
         }
 
         @Override
@@ -251,28 +202,19 @@ public class PullRequestGHEventSubscriber extends GHEventsSubscriber {
 
         @NonNull
         @Override
-        public String getSourceName() {
-            return repository;
-        }
-
-        @NonNull
-        @Override
         public Map<SCMHead, SCMRevision> heads(@NonNull SCMSource source) {
-            if (!(source instanceof GitHubSCMSource
-                    && isApiMatch(((GitHubSCMSource) source).getApiUri())
-                    && repoOwner.equalsIgnoreCase(((GitHubSCMSource) source).getRepoOwner())
-                    && repository.equalsIgnoreCase(((GitHubSCMSource) source).getRepository()))) {
+            if (!isValidSource(source)) {
                 return Collections.emptyMap();
             }
             GitHubSCMSource src = (GitHubSCMSource) source;
-            GHEventPayload.PullRequest pullRequest = getPayload();
-            GHPullRequest ghPullRequest = pullRequest.getPullRequest();
-            GHRepository repo = pullRequest.getRepository();
-            String prRepoName = repo.getName();
-            if (!prRepoName.matches(GitHubSCMSource.VALID_GITHUB_REPO_NAME)) {
+
+            if (!isValidRepoName()) {
                 // fake repository name
                 return Collections.emptyMap();
             }
+
+            GHEventPayload.PullRequest pullRequest = getPayload();
+            GHPullRequest ghPullRequest = pullRequest.getPullRequest();
             GHUser user;
             try {
                 user = ghPullRequest.getHead().getUser();
@@ -280,16 +222,17 @@ public class PullRequestGHEventSubscriber extends GHEventsSubscriber {
                 // fake owner name
                 return Collections.emptyMap();
             }
+
             String prOwnerName = user.getLogin();
-            if (!prOwnerName.matches(GitHubSCMSource.VALID_GITHUB_USER_NAME)) {
+            if (!isValidUser(prOwnerName)) {
                 // fake owner name
                 return Collections.emptyMap();
             }
-            if (!ghPullRequest.getBase().getSha().matches(GitHubSCMSource.VALID_GIT_SHA1)) {
+            if (!isValidGitSha1(ghPullRequest.getBase().getSha())) {
                 // fake base sha1
                 return Collections.emptyMap();
             }
-            if (!ghPullRequest.getHead().getSha().matches(GitHubSCMSource.VALID_GIT_SHA1)) {
+            if (!isValidGitSha1(ghPullRequest.getHead().getSha())) {
                 // fake head sha1
                 return Collections.emptyMap();
             }
@@ -302,16 +245,8 @@ public class PullRequestGHEventSubscriber extends GHEventsSubscriber {
             if (!fork && context.wantBranches()) {
                 final String branchName = ghPullRequest.getHead().getRef();
                 SCMHead head = new BranchSCMHead(branchName);
-                boolean excluded = false;
-                for (SCMHeadPrefilter prefilter : context.prefilters()) {
-                    if (prefilter.isExcluded(source, head)) {
-                        excluded = true;
-                        break;
-                    }
-                }
-                if (!excluded) {
-                    SCMRevision hash = new AbstractGitSCMSource.SCMRevisionImpl(
-                            head, ghPullRequest.getHead().getSha());
+                if (!atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
+                    SCMRevision hash = new AbstractGitSCMSource.SCMRevisionImpl(head, ghPullRequest.getHead().getSha());
                     result.put(head, hash);
                 }
             }
@@ -344,24 +279,12 @@ public class PullRequestGHEventSubscriber extends GHEventsSubscriber {
                                     ghPullRequest.getHead().getSha());
                             break;
                     }
-                    boolean excluded = false;
-                    for (SCMHeadPrefilter prefilter : context.prefilters()) {
-                        if (prefilter.isExcluded(source, head)) {
-                            excluded = true;
-                            break;
-                        }
-                    }
-                    if (!excluded) {
+                    if (!atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
                         result.put(head, revision);
                     }
                 }
             }
             return result;
-        }
-
-        @Override
-        public boolean isMatch(@NonNull SCM scm) {
-            return false;
         }
     }
 }

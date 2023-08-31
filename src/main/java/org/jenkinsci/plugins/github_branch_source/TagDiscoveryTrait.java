@@ -28,6 +28,7 @@ import hudson.Extension;
 import jenkins.plugins.git.GitTagSCMRevision;
 import jenkins.scm.api.SCMHeadCategory;
 import jenkins.scm.api.SCMHeadOrigin;
+import jenkins.scm.api.SCMRevision;
 import jenkins.scm.api.SCMSource;
 import jenkins.scm.api.trait.SCMHeadAuthority;
 import jenkins.scm.api.trait.SCMHeadAuthorityDescriptor;
@@ -91,7 +92,7 @@ public class TagDiscoveryTrait extends SCMSourceTrait {
 
     /** Trusts tags from the origin repository. */
     public static class TagSCMHeadAuthority
-            extends SCMHeadAuthority<SCMSourceRequest, GitHubTagSCMHead, GitTagSCMRevision> {
+            extends SCMHeadAuthority<SCMSourceRequest, GitHubTagSCMHead, SCMRevision> {
         /** {@inheritDoc} */
         @Override
         protected boolean checkTrusted(@NonNull SCMSourceRequest request, @NonNull GitHubTagSCMHead head) {

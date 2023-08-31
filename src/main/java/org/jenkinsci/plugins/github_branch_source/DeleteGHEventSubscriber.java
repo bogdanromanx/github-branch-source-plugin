@@ -28,8 +28,6 @@ import com.cloudbees.jenkins.GitHubRepositoryName;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import jenkins.plugins.git.GitBranchSCMHead;
-import jenkins.plugins.git.GitBranchSCMRevision;
-import jenkins.plugins.git.GitTagSCMRevision;
 import jenkins.scm.api.SCMEvent;
 import jenkins.scm.api.SCMHead;
 import jenkins.scm.api.SCMHeadObserver;
@@ -51,15 +49,16 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import static com.google.common.collect.Sets.immutableEnumSet;
-import static org.kohsuke.github.GHEvent.PUSH;
+import static org.kohsuke.github.GHEvent.CREATE;
+import static org.kohsuke.github.GHEvent.DELETE;
 
 /**
- * This subscriber manages {@link GHEvent} PUSH.
+ * This subscriber manages {@link GHEvent} DELETE.
  */
 @Extension
-public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
+public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
 
-    private static final Logger LOGGER = Logger.getLogger(PushGHEventSubscriber.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(DeleteGHEventSubscriber.class.getName());
 
     /**
      * {@inheritDoc}
@@ -68,7 +67,7 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
      */
     @Override
     protected Set<GHEvent> events() {
-        return immutableEnumSet(PUSH);
+        return immutableEnumSet(DELETE);
     }
 
     /**
@@ -76,11 +75,14 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
      */
     @Override
     protected void onEvent(GHSubscriberEvent event) {
-        GHEventPayload.Push p;
+        GHEventPayload.Delete p;
+
         try {
-            p = GitHub.offline().parseEventPayload(new StringReader(event.getPayload()), GHEventPayload.Push.class);
+            p = GitHub.offline()
+                    .parseEventPayload(new StringReader(event.getPayload()), GHEventPayload.Delete.class);
         } catch (Exception e) {
-            LogRecord lr = new LogRecord(Level.WARNING, "Could not parse {0} event from {1} with payload: {2}");
+            LogRecord lr =
+                    new LogRecord(Level.WARNING, "Could not parse {0} event from {1} with payload: {2}");
             lr.setParameters(new Object[]{event.getGHEvent(), event.getOrigin(), event.getPayload()});
             lr.setThrown(e);
             LOGGER.log(lr);
@@ -98,22 +100,23 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
         }
         GitHubRepositoryName changedRepository = repoNameOption.get();
 
-        if (p.isCreated()) {
-            fireAfterDelay(new SCMHeadEventImpl(
-                    SCMEvent.Type.CREATED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
-        } else if (p.isDeleted()) {
-            fireAfterDelay(new SCMHeadEventImpl(
-                    SCMEvent.Type.REMOVED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
-        } else {
-            fireAfterDelay(new SCMHeadEventImpl(
-                    SCMEvent.Type.UPDATED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
-        }
+        fireAfterDelay(
+                new SCMHeadEventImpl(
+                        SCMEvent.Type.REMOVED,
+                        event.getTimestamp(),
+                        p,
+                        changedRepository,
+                        event.getOrigin()));
     }
 
-    private static class SCMHeadEventImpl extends AbstractSCMHeadEvent<GHEventPayload.Push> {
+    private static class SCMHeadEventImpl extends AbstractSCMHeadEvent<GHEventPayload.Delete> {
         public SCMHeadEventImpl(
-                Type type, long timestamp, GHEventPayload.Push push, GitHubRepositoryName repo, String origin) {
-            super(type, timestamp, push, repo, origin);
+                Type type,
+                long timestamp,
+                GHEventPayload.Delete delete,
+                GitHubRepositoryName repo,
+                String origin) {
+            super(type, timestamp, delete, repo, origin);
         }
 
         /**
@@ -124,12 +127,12 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
             String ref = getPayload().getRef();
             if (ref.startsWith(R_TAGS)) {
                 ref = ref.substring(R_TAGS.length());
-                return "Push event for tag " + ref + " in repository " + repository;
+                return "Delete event for tag " + ref + " in repository " + repository;
             }
             if (ref.startsWith(R_HEADS)) {
                 ref = ref.substring(R_HEADS.length());
             }
-            return "Push event to branch " + ref + " in repository " + repository;
+            return "Delete event to branch " + ref + " in repository " + repository;
         }
 
         /**
@@ -140,12 +143,12 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
             String ref = getPayload().getRef();
             if (ref.startsWith(R_TAGS)) {
                 ref = ref.substring(R_TAGS.length());
-                return "Push event for tag " + ref;
+                return "Delete event for tag " + ref;
             }
             if (ref.startsWith(R_HEADS)) {
                 ref = ref.substring(R_HEADS.length());
             }
-            return "Push event to branch " + ref;
+            return "Delete event to branch " + ref;
         }
 
         /**
@@ -156,12 +159,12 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
             String ref = getPayload().getRef();
             if (ref.startsWith(R_TAGS)) {
                 ref = ref.substring(R_TAGS.length());
-                return "Push event for tag " + ref + " in repository " + repoOwner + "/" + repository;
+                return "Delete event for tag " + ref + " in repository " + repoOwner + "/" + repository;
             }
             if (ref.startsWith(R_HEADS)) {
                 ref = ref.substring(R_HEADS.length());
             }
-            return "Push event to branch " + ref + " in repository " + repoOwner + "/" + repository;
+            return "Delete event to branch " + ref + " in repository " + repoOwner + "/" + repository;
         }
 
         /**
@@ -174,36 +177,22 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
                 return Collections.emptyMap();
             }
             GitHubSCMSource src = (GitHubSCMSource) source;
-            GHEventPayload.Push push = getPayload();
+            GHEventPayload.Delete delete = getPayload();
 
             if (!isValidRepoName()) {
                 // fake repository name
                 return Collections.emptyMap();
             }
 
-            if (!isValidUser(push.getRepository().getOwnerName())) {
+            if (!isValidUser(delete.getRepository().getOwnerName())) {
                 // fake owner name
                 return Collections.emptyMap();
             }
 
-            if (!isValidGitSha1(push.getHead())) {
-                // fake head sha1
-                return Collections.emptyMap();
-            }
-
-            /*
-             * What we are looking for is to return the BranchSCMHead for this push
-             *
-             * Since anything we provide here is untrusted, we don't have to worry about whether this is also a PR...
-             * It will be revalidated later when the event is processed
-             *
-             * In any case, if it is also a PR then there will be a PullRequest:synchronize event that will handle
-             * things for us, so we just claim a BranchSCMHead
-             */
+            String ref = delete.getRef();
 
             GitHubSCMSourceContext context =
                     new GitHubSCMSourceContext(null, SCMHeadObserver.none()).withTraits(src.getTraits());
-            String ref = push.getRef();
 
             if (context.wantBranches() && !ref.startsWith(R_TAGS)) {
                 // we only want the branch details if the branch is actually built!
@@ -211,40 +200,17 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
                     return Collections.emptyMap();
                 }
-                return Collections.singletonMap(head, new GitBranchSCMRevision(head, push.getHead()));
+
+                return Collections.singletonMap(head, new NoHashSCMRevision(head));
             }
 
             if (context.wantTags() && ref.startsWith(R_TAGS)) {
-                // NOTE: GitHub provides the timestamp of the head commit, but if this is an annotated tag
-                // then that would be an incorrect timestamp, so we have to assume we are going to have the
-                // wrong timestamp for everything except lightweight tags.
-                //
-                // Now in any case, this actually does not matter.
-                //
-                // Event consumers are supposed to *not* trust the details reported by an event, it's just a
-                // hint.
-                // All we really want is that we report enough of a head to provide the head.getName()
-                // then the event consumer is supposed to turn around and do a fetch(..., event, ...)
-                // and as GitHubSCMSourceRequest strips out the timestamp in calculating the requested
-                // tag names, we have a winner.
-                //
-                // So let's make the assumption that tags are not pushed a long time after their creation
-                // and
-                // use the event timestamp. This may cause issues if anyone has a pre-filter that filters
-                // out tags that are less than X seconds old, but as such a filter would be incompatible
-                // with events
-                // discovering tags, no harm... the key part is that a pre-filter that removes tags older
-                // than X days
-                // will not strip the tag *here* (because it will always be only a few seconds "old"), but
-                // when
-                // the fetch call actually has the real tag date the pre-filter will apply at that point in
-                // time.
-
                 GitHubTagSCMHead head = new GitHubTagSCMHead(ref.substring(R_TAGS.length()), getTimestamp());
+
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
                     return Collections.emptyMap();
                 }
-                return Collections.singletonMap(head, new GitTagSCMRevision(head, push.getHead()));
+                return Collections.singletonMap(head, new NoHashSCMRevision(head));
             }
 
             return Collections.emptyMap();

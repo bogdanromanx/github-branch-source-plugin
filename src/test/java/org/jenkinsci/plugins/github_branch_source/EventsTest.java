@@ -25,12 +25,6 @@
 
 package org.jenkinsci.plugins.github_branch_source;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static org.junit.Assert.assertEquals;
-
-import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 import jenkins.scm.api.SCMEvent;
 import jenkins.scm.api.SCMEvents;
 import jenkins.scm.api.SCMHeadEvent;
@@ -46,9 +40,18 @@ import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.TestExtension;
 
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static org.junit.Assert.assertEquals;
+
 public class EventsTest {
 
-    /** All tests in this class only use Jenkins for the extensions */
+    /**
+     * All tests in this class only use Jenkins for the extensions
+     */
     @ClassRule
     public static JenkinsRule r = new JenkinsRule();
 
@@ -98,6 +101,42 @@ public class EventsTest {
 
         firedEventType = SCMEvent.Type.UPDATED;
         ghEvent = callOnEvent(subscriber, "EventsTest/pushEventUpdated.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghCreateEventForTag_then_createHeadEventFired() throws Exception {
+        CreateGHEventSubscriber subscriber = new CreateGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.CREATED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/createEventForTag.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghCreateEventForBranch_then_createHeadEventFired() throws Exception {
+        CreateGHEventSubscriber subscriber = new CreateGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.CREATED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/createEventForBranch.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghDeleteEventForTag_then_removeHeadEventFired() throws Exception {
+        DeleteGHEventSubscriber subscriber = new DeleteGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.REMOVED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/deleteEventForTag.json");
+        waitAndAssertReceived(true);
+    }
+
+    @Test
+    public void given_ghDeleteEventForBranch_then_removeHeadEventFired() throws Exception {
+        DeleteGHEventSubscriber subscriber = new DeleteGHEventSubscriber();
+
+        firedEventType = SCMEvent.Type.REMOVED;
+        ghEvent = callOnEvent(subscriber, "EventsTest/deleteEventForBranch.json");
         waitAndAssertReceived(true);
     }
 
@@ -180,14 +219,7 @@ public class EventsTest {
         waitAndAssertReceived(false);
     }
 
-    private GHSubscriberEvent callOnEvent(PushGHEventSubscriber subscriber, String eventPayloadFile)
-            throws IOException {
-        GHSubscriberEvent event = createEvent(eventPayloadFile);
-        subscriber.onEvent(event);
-        return event;
-    }
-
-    private GHSubscriberEvent callOnEvent(PullRequestGHEventSubscriber subscriber, String eventPayloadFile)
+    private <S extends AbstractGHEventSubscriber> GHSubscriberEvent callOnEvent(S subscriber, String eventPayloadFile)
             throws IOException {
         GHSubscriberEvent event = createEvent(eventPayloadFile);
         subscriber.onEvent(event);

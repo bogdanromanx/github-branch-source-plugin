@@ -63,7 +63,7 @@ public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
     /**
      * {@inheritDoc}
      *
-     * @return set with only PULL_REQUEST event
+     * @return set with only DELETE event
      */
     @Override
     protected Set<GHEvent> events() {

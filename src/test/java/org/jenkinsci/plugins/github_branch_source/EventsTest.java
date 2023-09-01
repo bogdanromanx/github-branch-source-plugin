@@ -226,6 +226,20 @@ public class EventsTest {
         return event;
     }
 
+    private GHSubscriberEvent callOnEvent(PushGHEventSubscriber subscriber, String eventPayloadFile)
+            throws IOException {
+        GHSubscriberEvent event = createEvent(eventPayloadFile);
+        subscriber.onEvent(event);
+        return event;
+    }
+
+    private GHSubscriberEvent callOnEvent(PullRequestGHEventSubscriber subscriber, String eventPayloadFile)
+            throws IOException {
+        GHSubscriberEvent event = createEvent(eventPayloadFile);
+        subscriber.onEvent(event);
+        return event;
+    }
+
     private GHSubscriberEvent callOnEvent(GitHubRepositoryEventSubscriber subscriber, String eventPayloadFile)
             throws IOException {
         GHSubscriberEvent event = createEvent(eventPayloadFile);

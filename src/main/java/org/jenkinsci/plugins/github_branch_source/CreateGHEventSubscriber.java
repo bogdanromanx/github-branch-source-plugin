@@ -62,7 +62,7 @@ public class CreateGHEventSubscriber extends AbstractGHEventSubscriber {
     /**
      * {@inheritDoc}
      *
-     * @return set with only PULL_REQUEST event
+     * @return set with only CREATE event
      */
     @Override
     protected Set<GHEvent> events() {

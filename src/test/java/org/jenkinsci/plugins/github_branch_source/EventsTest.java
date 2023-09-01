@@ -25,6 +25,12 @@
 
 package org.jenkinsci.plugins.github_branch_source;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import jenkins.scm.api.SCMEvent;
 import jenkins.scm.api.SCMEvents;
 import jenkins.scm.api.SCMHeadEvent;
@@ -39,13 +45,6 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.TestExtension;
-
-import java.io.IOException;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static org.junit.Assert.assertEquals;
 
 public class EventsTest {
 

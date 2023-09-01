@@ -5,7 +5,14 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
 import hudson.model.Item;
 import hudson.scm.SCM;
-import jenkins.plugins.git.GitBranchSCMHead;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import jenkins.scm.api.SCMHead;
 import jenkins.scm.api.SCMHeadEvent;
 import jenkins.scm.api.SCMNavigator;
@@ -16,15 +23,6 @@ import jenkins.scm.api.trait.SCMHeadPrefilter;
 import org.jenkinsci.plugins.github.extension.GHEventsSubscriber;
 import org.jenkinsci.plugins.github.extension.GHSubscriberEvent;
 import org.kohsuke.github.GHEventPayload;
-
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
 
@@ -38,7 +36,6 @@ public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
     protected void onEvent(GHSubscriberEvent event) {
         super.onEvent(event);
     }
-
 
     /**
      * {@inheritDoc}
@@ -86,15 +83,14 @@ public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
         return Optional.of(changedRepository);
     }
 
-    protected static abstract class AbstractSCMHeadEvent<P extends GHEventPayload> extends SCMHeadEvent<P> {
+    protected abstract static class AbstractSCMHeadEvent<P extends GHEventPayload> extends SCMHeadEvent<P> {
         protected static final String R_HEADS = "refs/heads/";
         protected static final String R_TAGS = "refs/tags/";
         protected final String repoHost;
         protected final String repoOwner;
         protected final String repository;
 
-        protected AbstractSCMHeadEvent(
-                Type type, long timestamp, P payload, GitHubRepositoryName repo, String origin) {
+        protected AbstractSCMHeadEvent(Type type, long timestamp, P payload, GitHubRepositoryName repo, String origin) {
             super(type, timestamp, payload, origin);
             this.repoHost = repo.getHost();
             this.repoOwner = payload.getRepository().getOwnerName();
@@ -153,7 +149,6 @@ public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
 
         protected static BranchSCMHead branchSCMHeadOf(String ref) {
             if (ref.startsWith(R_HEADS)) {
-                // GitHub is consistent in inconsistency, this ref is the full ref... other refs are not!
                 return new BranchSCMHead(ref.substring(R_HEADS.length()));
             }
             return new BranchSCMHead(ref);
@@ -161,16 +156,13 @@ public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
 
         protected static GitHubTagSCMHead tagSCMHeadOf(String ref, long timestamp) {
             if (ref.startsWith(R_TAGS)) {
-                // GitHub is consistent in inconsistency, this ref is the full ref... other refs are not!
-                return new GitHubTagSCMHead(ref.substring(R_HEADS.length()), timestamp);
+                return new GitHubTagSCMHead(ref.substring(R_TAGS.length()), timestamp);
             }
             return new GitHubTagSCMHead(ref, timestamp);
         }
 
         protected static boolean atLeastOnePrefilterExcludesHead(
-                @NonNull List<SCMHeadPrefilter> prefilters,
-                @NonNull SCMSource source,
-                @NonNull SCMHead head) {
+                @NonNull List<SCMHeadPrefilter> prefilters, @NonNull SCMSource source, @NonNull SCMHead head) {
             return prefilters.stream().anyMatch(prefilter -> prefilter.isExcluded(source, head));
         }
 

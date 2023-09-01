@@ -12,7 +12,7 @@
     "avatar_url": "https://avatars.githubusercontent.com/u/7649605?v=2"
   },
   "pusher_type": "user",
-  "ref": "refs/tags/my_tag",
+  "ref": "my_tag",
   "ref_type": "tag",
   "repository": {
     "id": 35129377,

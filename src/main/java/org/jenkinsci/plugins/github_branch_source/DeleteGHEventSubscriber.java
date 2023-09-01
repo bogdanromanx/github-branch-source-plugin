@@ -24,21 +24,12 @@
 
 package org.jenkinsci.plugins.github_branch_source;
 
+import static com.google.common.collect.Sets.immutableEnumSet;
+import static org.kohsuke.github.GHEvent.DELETE;
+
 import com.cloudbees.jenkins.GitHubRepositoryName;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
-import jenkins.plugins.git.GitBranchSCMHead;
-import jenkins.scm.api.SCMEvent;
-import jenkins.scm.api.SCMHead;
-import jenkins.scm.api.SCMHeadObserver;
-import jenkins.scm.api.SCMNavigator;
-import jenkins.scm.api.SCMRevision;
-import jenkins.scm.api.SCMSource;
-import org.jenkinsci.plugins.github.extension.GHSubscriberEvent;
-import org.kohsuke.github.GHEvent;
-import org.kohsuke.github.GHEventPayload;
-import org.kohsuke.github.GitHub;
-
 import java.io.StringReader;
 import java.util.Collections;
 import java.util.Map;
@@ -47,10 +38,15 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-
-import static com.google.common.collect.Sets.immutableEnumSet;
-import static org.kohsuke.github.GHEvent.CREATE;
-import static org.kohsuke.github.GHEvent.DELETE;
+import jenkins.scm.api.SCMEvent;
+import jenkins.scm.api.SCMHead;
+import jenkins.scm.api.SCMHeadObserver;
+import jenkins.scm.api.SCMRevision;
+import jenkins.scm.api.SCMSource;
+import org.jenkinsci.plugins.github.extension.GHSubscriberEvent;
+import org.kohsuke.github.GHEvent;
+import org.kohsuke.github.GHEventPayload;
+import org.kohsuke.github.GitHub;
 
 /**
  * This subscriber manages {@link GHEvent} DELETE.
@@ -78,20 +74,18 @@ public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
         GHEventPayload.Delete p;
 
         try {
-            p = GitHub.offline()
-                    .parseEventPayload(new StringReader(event.getPayload()), GHEventPayload.Delete.class);
+            p = GitHub.offline().parseEventPayload(new StringReader(event.getPayload()), GHEventPayload.Delete.class);
         } catch (Exception e) {
-            LogRecord lr =
-                    new LogRecord(Level.WARNING, "Could not parse {0} event from {1} with payload: {2}");
-            lr.setParameters(new Object[]{event.getGHEvent(), event.getOrigin(), event.getPayload()});
+            LogRecord lr = new LogRecord(Level.WARNING, "Could not parse {0} event from {1} with payload: {2}");
+            lr.setParameters(new Object[] {event.getGHEvent(), event.getOrigin(), event.getPayload()});
             lr.setThrown(e);
             LOGGER.log(lr);
             return;
         }
 
         String repoUrl = p.getRepository().getHtmlUrl().toExternalForm();
-        LOGGER.log(Level.FINE, "Received {0} for {1} from {2} with payload {3}", new Object[]{
-                event.getGHEvent(), repoUrl, event.getOrigin(), event.getPayload()
+        LOGGER.log(Level.FINE, "Received {0} for {1} from {2} with payload {3}", new Object[] {
+            event.getGHEvent(), repoUrl, event.getOrigin(), event.getPayload()
         });
 
         Optional<GitHubRepositoryName> repoNameOption = validateRepository(p);
@@ -100,22 +94,13 @@ public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
         }
         GitHubRepositoryName changedRepository = repoNameOption.get();
 
-        fireAfterDelay(
-                new SCMHeadEventImpl(
-                        SCMEvent.Type.REMOVED,
-                        event.getTimestamp(),
-                        p,
-                        changedRepository,
-                        event.getOrigin()));
+        fireAfterDelay(new SCMHeadEventImpl(
+                SCMEvent.Type.REMOVED, event.getTimestamp(), p, changedRepository, event.getOrigin()));
     }
 
     private static class SCMHeadEventImpl extends AbstractSCMHeadEvent<GHEventPayload.Delete> {
         public SCMHeadEventImpl(
-                Type type,
-                long timestamp,
-                GHEventPayload.Delete delete,
-                GitHubRepositoryName repo,
-                String origin) {
+                Type type, long timestamp, GHEventPayload.Delete delete, GitHubRepositoryName repo, String origin) {
             super(type, timestamp, delete, repo, origin);
         }
 
@@ -131,7 +116,8 @@ public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
             } else if (isTagRef(refType)) {
                 return "Delete event for branch " + ref + " in repository " + repoOwner + "/" + repository;
             }
-            return "Delete event for " + ref + ", with unknown ref type " + refType + " in repository " + repoOwner + "/" + repository;
+            return "Delete event for " + ref + ", with unknown ref type " + refType + " in repository " + repoOwner
+                    + "/" + repository;
         }
 
         /**
@@ -167,7 +153,7 @@ public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
             if (context.wantBranches() && isBranchRef(refType)) {
                 BranchSCMHead head = branchSCMHeadOf(ref);
 
-                LOGGER.log(Level.FINE, "Mapped branch head {0} for ref {1}", new Object[]{head.getName(), ref});
+                LOGGER.log(Level.FINE, "Mapped branch head {0} for ref {1}", new Object[] {head.getName(), ref});
 
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
                     LOGGER.log(Level.FINE, "Branch prefilters excluded head {0}", head.getName());
@@ -181,7 +167,7 @@ public class DeleteGHEventSubscriber extends AbstractGHEventSubscriber {
             if (context.wantTags() && isTagRef(refType)) {
                 GitHubTagSCMHead head = tagSCMHeadOf(ref, getTimestamp());
 
-                LOGGER.log(Level.FINE, "Mapped tag head {0} for ref {1}", new Object[]{head.getName(), ref});
+                LOGGER.log(Level.FINE, "Mapped tag head {0} for ref {1}", new Object[] {head.getName(), ref});
 
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
                     LOGGER.log(Level.FINE, "Tag prefilters excluded head {0}", head.getName());

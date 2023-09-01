@@ -25,7 +25,6 @@ package org.jenkinsci.plugins.github_branch_source;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
-import jenkins.plugins.git.GitTagSCMRevision;
 import jenkins.scm.api.SCMHeadCategory;
 import jenkins.scm.api.SCMHeadOrigin;
 import jenkins.scm.api.SCMRevision;
@@ -91,8 +90,7 @@ public class TagDiscoveryTrait extends SCMSourceTrait {
     }
 
     /** Trusts tags from the origin repository. */
-    public static class TagSCMHeadAuthority
-            extends SCMHeadAuthority<SCMSourceRequest, GitHubTagSCMHead, SCMRevision> {
+    public static class TagSCMHeadAuthority extends SCMHeadAuthority<SCMSourceRequest, GitHubTagSCMHead, SCMRevision> {
         /** {@inheritDoc} */
         @Override
         protected boolean checkTrusted(@NonNull SCMSourceRequest request, @NonNull GitHubTagSCMHead head) {

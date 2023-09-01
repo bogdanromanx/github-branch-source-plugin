@@ -89,8 +89,8 @@ public class CreateGHEventSubscriber extends AbstractGHEventSubscriber {
         }
 
         String repoUrl = p.getRepository().getHtmlUrl().toExternalForm();
-        LOGGER.log(Level.FINE, "Received {0} for {1} from {2}", new Object[]{
-                event.getGHEvent(), repoUrl, event.getOrigin()
+        LOGGER.log(Level.FINE, "Received {0} for {1} from {2} with payload {3}", new Object[]{
+                event.getGHEvent(), repoUrl, event.getOrigin(), event.getPayload()
         });
 
         Optional<GitHubRepositoryName> repoNameOption = validateRepository(p);
@@ -122,48 +122,15 @@ public class CreateGHEventSubscriber extends AbstractGHEventSubscriber {
          * {@inheritDoc}
          */
         @Override
-        public String descriptionFor(@NonNull SCMNavigator navigator) {
-            String ref = getPayload().getRef();
-            if (ref.startsWith(R_TAGS)) {
-                ref = ref.substring(R_TAGS.length());
-                return "Create event for tag " + ref + " in repository " + repository;
-            }
-            if (ref.startsWith(R_HEADS)) {
-                ref = ref.substring(R_HEADS.length());
-            }
-            return "Create event to branch " + ref + " in repository " + repository;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public String descriptionFor(SCMSource source) {
-            String ref = getPayload().getRef();
-            if (ref.startsWith(R_TAGS)) {
-                ref = ref.substring(R_TAGS.length());
-                return "Create event for tag " + ref;
-            }
-            if (ref.startsWith(R_HEADS)) {
-                ref = ref.substring(R_HEADS.length());
-            }
-            return "Create event to branch " + ref;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
         public String description() {
             String ref = getPayload().getRef();
-            if (ref.startsWith(R_TAGS)) {
-                ref = ref.substring(R_TAGS.length());
+            String refType = getPayload().getRefType();
+            if (isBranchRef(refType)) {
                 return "Create event for tag " + ref + " in repository " + repoOwner + "/" + repository;
+            } else if (isTagRef(refType)) {
+                return "Create event for branch " + ref + " in repository " + repoOwner + "/" + repository;
             }
-            if (ref.startsWith(R_HEADS)) {
-                ref = ref.substring(R_HEADS.length());
-            }
-            return "Create event to branch " + ref + " in repository " + repoOwner + "/" + repository;
+            return "Create event for " + ref + ", with unknown ref type " + refType + " in repository " + repoOwner + "/" + repository;
         }
 
         /**
@@ -172,11 +139,13 @@ public class CreateGHEventSubscriber extends AbstractGHEventSubscriber {
         @NonNull
         @Override
         public Map<SCMHead, SCMRevision> heads(@NonNull SCMSource source) {
+            GHEventPayload.Create create = getPayload();
             if (!isValidSource(source)) {
                 return Collections.emptyMap();
             }
             GitHubSCMSource src = (GitHubSCMSource) source;
-            GHEventPayload.Create create = getPayload();
+
+            LOGGER.log(Level.FINE, "Handling CREATE event for ref {0}", create.getRef());
 
             if (!isValidRepoName()) {
                 // fake repository name
@@ -189,29 +158,40 @@ public class CreateGHEventSubscriber extends AbstractGHEventSubscriber {
             }
 
             String ref = create.getRef();
+            String refType = create.getRefType();
 
             GitHubSCMSourceContext context =
                     new GitHubSCMSourceContext(null, SCMHeadObserver.none()).withTraits(src.getTraits());
 
-            if (context.wantBranches() && !ref.startsWith(R_TAGS)) {
-                // we only want the branch details if the branch is actually built!
-                GitBranchSCMHead head = branchSCMHeadOf(ref);
+            if (context.wantBranches() && isBranchRef(refType)) {
+                BranchSCMHead head = branchSCMHeadOf(ref);
+
+                LOGGER.log(Level.FINE, "Mapped branch head {0} for ref {1}", new Object[]{head.getName(), ref});
+
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
+                    LOGGER.log(Level.FINE, "Branch prefilters excluded head {0}", head.getName());
                     return Collections.emptyMap();
                 }
 
+                LOGGER.log(Level.FINE, "Returning branch SCMRevision for head {0}", head.getName());
                 return Collections.singletonMap(head, new NoHashSCMRevision(head));
             }
 
-            if (context.wantTags() && ref.startsWith(R_TAGS)) {
-                GitHubTagSCMHead head = new GitHubTagSCMHead(ref.substring(R_TAGS.length()), getTimestamp());
+            if (context.wantTags() && isTagRef(refType)) {
+                GitHubTagSCMHead head = tagSCMHeadOf(ref, getTimestamp());
+
+                LOGGER.log(Level.FINE, "Mapped tag head {0} for ref {1}", new Object[]{head.getName(), ref});
 
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
+                    LOGGER.log(Level.FINE, "Tag prefilters excluded head {0}", head.getName());
                     return Collections.emptyMap();
                 }
+
+                LOGGER.log(Level.FINE, "Returning tag SCMRevision for head {0}", head.getName());
                 return Collections.singletonMap(head, new NoHashSCMRevision(head));
             }
 
+            LOGGER.log(Level.FINE, "Event ignored as both branch or tag");
             return Collections.emptyMap();
         }
     }

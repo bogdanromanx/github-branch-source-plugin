@@ -151,12 +151,20 @@ public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
             return value != null && value.matches(GitHubSCMSource.VALID_GITHUB_USER_NAME);
         }
 
-        protected static GitBranchSCMHead branchSCMHeadOf(String ref) {
+        protected static BranchSCMHead branchSCMHeadOf(String ref) {
             if (ref.startsWith(R_HEADS)) {
                 // GitHub is consistent in inconsistency, this ref is the full ref... other refs are not!
-                return new GitBranchSCMHead(ref.substring(R_HEADS.length()));
+                return new BranchSCMHead(ref.substring(R_HEADS.length()));
             }
-            return new GitBranchSCMHead(ref);
+            return new BranchSCMHead(ref);
+        }
+
+        protected static GitHubTagSCMHead tagSCMHeadOf(String ref, long timestamp) {
+            if (ref.startsWith(R_TAGS)) {
+                // GitHub is consistent in inconsistency, this ref is the full ref... other refs are not!
+                return new GitHubTagSCMHead(ref.substring(R_HEADS.length()), timestamp);
+            }
+            return new GitHubTagSCMHead(ref, timestamp);
         }
 
         protected static boolean atLeastOnePrefilterExcludesHead(
@@ -164,6 +172,14 @@ public abstract class AbstractGHEventSubscriber extends GHEventsSubscriber {
                 @NonNull SCMSource source,
                 @NonNull SCMHead head) {
             return prefilters.stream().anyMatch(prefilter -> prefilter.isExcluded(source, head));
+        }
+
+        protected static boolean isBranchRef(String refType) {
+            return "branch".equals(refType);
+        }
+
+        protected static boolean isTagRef(String refType) {
+            return "tag".equals(refType);
         }
     }
 

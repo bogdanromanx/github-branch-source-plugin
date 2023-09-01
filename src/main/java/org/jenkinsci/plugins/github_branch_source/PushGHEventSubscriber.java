@@ -27,8 +27,7 @@ package org.jenkinsci.plugins.github_branch_source;
 import com.cloudbees.jenkins.GitHubRepositoryName;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
-import jenkins.plugins.git.GitBranchSCMHead;
-import jenkins.plugins.git.GitBranchSCMRevision;
+import jenkins.plugins.git.AbstractGitSCMSource;
 import jenkins.plugins.git.GitTagSCMRevision;
 import jenkins.scm.api.SCMEvent;
 import jenkins.scm.api.SCMHead;
@@ -207,11 +206,11 @@ public class PushGHEventSubscriber extends AbstractGHEventSubscriber {
 
             if (context.wantBranches() && !ref.startsWith(R_TAGS)) {
                 // we only want the branch details if the branch is actually built!
-                GitBranchSCMHead head = branchSCMHeadOf(ref);
+                BranchSCMHead head = branchSCMHeadOf(ref);
                 if (atLeastOnePrefilterExcludesHead(context.prefilters(), source, head)) {
                     return Collections.emptyMap();
                 }
-                return Collections.singletonMap(head, new GitBranchSCMRevision(head, push.getHead()));
+                return Collections.singletonMap(head, new AbstractGitSCMSource.SCMRevisionImpl(head, push.getHead()));
             }
 
             if (context.wantTags() && ref.startsWith(R_TAGS)) {

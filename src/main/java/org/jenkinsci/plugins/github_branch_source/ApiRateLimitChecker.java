@@ -191,7 +191,14 @@ public enum ApiRateLimitChecker {
             // Pass empty apiUrl to force no rate limit checking
             localRateLimitChecker.set(NoThrottle.getChecker(listener, ""));
 
-            gitHub.checkApiUrlValidity();
+            // While github.checkApiUrlValidity() would seem the appropriate way to verify the connection,
+            // calling the root ('/') endpoint on the Github API counts against the rate limit.
+            // Calling '/rate_limit' does not count against the rate limit, but would still throw if the
+            // credentials are not valid.
+            // (as per the
+            // https://docs.github.com/en/rest/rate-limit/rate-limit?apiVersion=2022-11-28#get-rate-limit-status-for-the-authenticated-user
+            // "Note: Accessing this endpoint does not count against your REST API rate limit.")
+            gitHub.getRateLimit();
         } finally {
             localRateLimitChecker.set(checker);
         }
